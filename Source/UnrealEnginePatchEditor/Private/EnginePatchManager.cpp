@@ -132,9 +132,94 @@ bool FEnginePatchManager::ApplyPatch(const FEnginePatch& Patch, FString& OutErro
 	for (const FEnginePatchFile& PFile : MatchedVersion->Files)
 	{
 		FString FullPath = ResolveEnginePath(PFile.File);
+
+		// Load file once
+		TArray<FString> Lines;
+		if (!FFileHelper::LoadFileToStringArray(Lines, *FullPath))
+		{
+			OutError = FString::Printf(TEXT("Cannot read file: %s"), *FullPath);
+			return false;
+		}
+
+		int32 LineOffset = 0;
+
+		// Apply each operation in order, tracking line offset
 		for (const FEnginePatchOperation& Op : PFile.Operations)
 		{
-			if (!ApplyOperation(FullPath, Patch.PatchId, Op, OutError)) return false;
+			// Check idempotency: search for begin marker in current Lines
+			FString BeginMarker = MakeBeginMarker(Patch.PatchId, Op.Id);
+			bool bAlreadyApplied = false;
+			for (const FString& Line : Lines)
+			{
+				if (Line.Contains(BeginMarker))
+				{
+					bAlreadyApplied = true;
+					break;
+				}
+			}
+
+			// If already applied, skip this operation (do NOT update LineOffset)
+			if (bAlreadyApplied)
+			{
+				continue;
+			}
+
+			int32 AdjustedLine = (Op.Line - 1) + LineOffset; // Convert to 0-based and apply offset
+
+			// Validate remove lines match
+			if (Op.Remove.Num() > 0)
+			{
+				for (int32 i = 0; i < Op.Remove.Num(); ++i)
+				{
+					if (AdjustedLine + i >= Lines.Num())
+					{
+						OutError = FString::Printf(TEXT("Line %d out of range in %s"), Op.Line + i, *FullPath);
+						return false;
+					}
+					FString Expected = Op.Remove[i].TrimStartAndEnd();
+					FString Actual   = Lines[AdjustedLine + i].TrimStartAndEnd();
+					if (Expected != Actual)
+					{
+						OutError = FString::Printf(TEXT("Line %d mismatch in %s\nExpected: %s\nActual:   %s"),
+							Op.Line + i, *FullPath, *Expected, *Actual);
+						return false;
+					}
+				}
+			}
+
+			// Build marker block (BEGIN, @@REMOVED: lines, add lines, END)
+			TArray<FString> Block;
+			Block.Add(MakeBeginMarker(Patch.PatchId, Op.Id));
+			for (const FString& RemovedLine : Op.Remove)
+			{
+				Block.Add(FString::Printf(TEXT("// @@REMOVED: %s"), *RemovedLine));
+			}
+			for (const FString& AddedLine : Op.Add)
+			{
+				Block.Add(AddedLine);
+			}
+			Block.Add(MakeEndMarker(Patch.PatchId, Op.Id));
+
+			// Replace/insert: remove old lines, insert block
+			int32 RemoveCount = FMath::Max(Op.Remove.Num(), 0);
+			if (RemoveCount > 0)
+			{
+				Lines.RemoveAt(AdjustedLine, RemoveCount);
+			}
+			for (int32 i = 0; i < Block.Num(); ++i)
+			{
+				Lines.Insert(Block[i], AdjustedLine + i);
+			}
+
+			// Update line offset for next operation
+			LineOffset += Block.Num() - RemoveCount;
+		}
+
+		// Save file once at the end
+		if (!FFileHelper::SaveStringArrayToFile(Lines, *FullPath))
+		{
+			OutError = FString::Printf(TEXT("Cannot write file: %s"), *FullPath);
+			return false;
 		}
 	}
 	return true;
