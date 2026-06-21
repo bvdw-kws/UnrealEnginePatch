@@ -20,5 +20,10 @@
       "Type": "Editor",
       "LoadingPhase": "Default"
     }
-  ]
+  ],
+  "PreBuildSteps": {
+    "Win64": [
+      "\"$(PluginDir)\\Tools\\Bin\\EnginePatchCLI.exe\" \"$(ProjectDir)\""
+    ]
+  }
 }
