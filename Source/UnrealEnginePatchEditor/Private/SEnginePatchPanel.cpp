@@ -17,6 +17,7 @@
 
 void SEnginePatchPanel::Construct(const FArguments& InArgs)
 {
+	if (UUnrealEnginePatchSubsystem* Sub = GetSubsystem()) Sub->RefreshStatus();
 	RefreshList();
 
 	ChildSlot
@@ -37,6 +38,12 @@ void SEnginePatchPanel::Construct(const FArguments& InArgs)
 				.Text(LOCTEXT("UnpatchAll", "Unpatch All"))
 				.OnClicked(this, &SEnginePatchPanel::OnUnpatchAll)
 			]
+			+ SHorizontalBox::Slot().AutoWidth().Padding(4)
+			[
+				SNew(SButton)
+				.Text(LOCTEXT("Refresh", "Refresh"))
+				.OnClicked(this, &SEnginePatchPanel::OnRefreshStatus)
+			]
 			+ SHorizontalBox::Slot().FillWidth(1).HAlign(HAlign_Right).VAlign(VAlign_Center).Padding(4)
 			[
 				SNew(STextBlock).Text(this, &SEnginePatchPanel::GetEngineVersionText)
@@ -49,8 +56,9 @@ void SEnginePatchPanel::Construct(const FArguments& InArgs)
 			.OnGenerateRow(this, &SEnginePatchPanel::OnGeneratePatchRow)
 			.HeaderRow(
 				SNew(SHeaderRow)
-				+ SHeaderRow::Column("PatchId").DefaultLabel(LOCTEXT("ColId", "Patch ID")).FillWidth(0.3f)
-				+ SHeaderRow::Column("Description").DefaultLabel(LOCTEXT("ColDesc", "Description")).FillWidth(0.5f)
+				+ SHeaderRow::Column("PatchId").DefaultLabel(LOCTEXT("ColId", "Patch ID")).FillWidth(0.25f)
+				+ SHeaderRow::Column("Description").DefaultLabel(LOCTEXT("ColDesc", "Description")).FillWidth(0.4f)
+				+ SHeaderRow::Column("Plugin").DefaultLabel(LOCTEXT("ColPlugin", "Plugin")).FillWidth(0.15f)
 				+ SHeaderRow::Column("Status").DefaultLabel(LOCTEXT("ColStatus", "Status")).FillWidth(0.1f)
 				+ SHeaderRow::Column("Actions").DefaultLabel(LOCTEXT("ColActions", "Actions")).FillWidth(0.1f)
 			)
@@ -63,7 +71,6 @@ void SEnginePatchPanel::RefreshList()
 	PatchItems.Empty();
 	if (UUnrealEnginePatchSubsystem* Sub = GetSubsystem())
 	{
-		Sub->RefreshStatus();
 		for (FEnginePatch& Patch : Sub->Patches)
 		{
 			PatchItems.Add(MakeShared<FEnginePatch>(Patch));
@@ -77,10 +84,12 @@ TSharedRef<ITableRow> SEnginePatchPanel::OnGeneratePatchRow(TSharedPtr<FEnginePa
 	return SNew(STableRow<TSharedPtr<FEnginePatch>>, OwnerTable)
 	[
 		SNew(SHorizontalBox)
-		+ SHorizontalBox::Slot().FillWidth(0.3f).Padding(2)
+		+ SHorizontalBox::Slot().FillWidth(0.25f).Padding(2)
 		[ SNew(STextBlock).Text(FText::FromString(Item->PatchId)) ]
-		+ SHorizontalBox::Slot().FillWidth(0.5f).Padding(2)
+		+ SHorizontalBox::Slot().FillWidth(0.4f).Padding(2)
 		[ SNew(STextBlock).Text(FText::FromString(Item->Description)) ]
+		+ SHorizontalBox::Slot().FillWidth(0.15f).Padding(2)
+		[ SNew(STextBlock).Text(FText::FromString(Item->Plugin.IsEmpty() ? TEXT("-") : Item->Plugin)) ]
 		+ SHorizontalBox::Slot().FillWidth(0.1f).Padding(2)
 		[ SNew(STextBlock).Text(GetStatusText(Item->Status)).ColorAndOpacity(GetStatusColor(Item->Status)) ]
 		+ SHorizontalBox::Slot().FillWidth(0.1f).Padding(2)
@@ -124,6 +133,13 @@ FReply SEnginePatchPanel::OnUnpatchAll()
 		Sub->UnpatchAll(Errors);
 		for (const FString& E : Errors) UE_LOG(LogTemp, Error, TEXT("EnginePatch: %s"), *E);
 	}
+	RefreshList();
+	return FReply::Handled();
+}
+
+FReply SEnginePatchPanel::OnRefreshStatus()
+{
+	if (UUnrealEnginePatchSubsystem* Sub = GetSubsystem()) Sub->RefreshStatus();
 	RefreshList();
 	return FReply::Handled();
 }

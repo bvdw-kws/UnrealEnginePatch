@@ -7,13 +7,26 @@
 #include "UnrealEnginePatchSubsystem.h"
 #include "EnginePatchFileLoader.h"
 #include "EnginePatchManager.h"
-#include "Interfaces/IPluginManager.h"
 #include "Misc/Paths.h"
+#include "Interfaces/IProjectManager.h"
+#include "Interfaces/IPluginManager.h"
+#include "ProjectDescriptor.h"
 
-static bool IsPluginEnabled(const FString& PluginName)
+// Uses the live FProjectDescriptor (updated immediately when the user toggles a plugin)
+// rather than IPlugin::IsEnabled() which reflects the startup state only.
+static bool IsPluginEnabledInUproject(const FString& PluginName)
 {
-	TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(PluginName);
-	return Plugin.IsValid() && Plugin->IsEnabled();
+	const FProjectDescriptor* Project = IProjectManager::Get().GetCurrentProject();
+	if (!Project) return true;
+
+	int32 Idx = Project->FindPluginReferenceIndex(PluginName);
+	if (Idx == INDEX_NONE)
+	{
+		// Not listed in uproject — fall back to the plugin's own EnabledByDefault descriptor field
+		TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(PluginName);
+		return Plugin.IsValid() && Plugin->IsEnabledByDefault(!Project->bDisableEnginePluginsByDefault);
+	}
+	return Project->Plugins[Idx].bEnabled;
 }
 
 void UUnrealEnginePatchSubsystem::Initialize(FSubsystemCollectionBase& Collection)
@@ -47,7 +60,7 @@ void UUnrealEnginePatchSubsystem::SyncPatchesOnClose()
 	// - Remove patches for disabled plugins (keep source clean)
 	for (FEnginePatch& Patch : Patches)
 	{
-		const bool bPluginEnabled = Patch.Plugin.IsEmpty() || IsPluginEnabled(Patch.Plugin);
+		const bool bPluginEnabled = Patch.Plugin.IsEmpty() || IsPluginEnabledInUproject(Patch.Plugin);
 		FString Error;
 
 		if (bPluginEnabled && Patch.Status == EPatchStatus::NotApplied)

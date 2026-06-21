@@ -24,6 +24,7 @@ private:
 
 	FReply OnApplyAll();
 	FReply OnUnpatchAll();
+	FReply OnRefreshStatus();
 	FReply OnApplySingle(FString PatchId);
 	FReply OnUnpatchSingle(FString PatchId);
 

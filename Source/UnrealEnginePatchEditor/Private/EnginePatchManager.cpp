@@ -8,7 +8,16 @@
 #include "EnginePatchManager.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "HAL/FileManager.h"
 #include "Runtime/Launch/Resources/Version.h"
+
+static void MakeWritable(const FString& FilePath)
+{
+	if (IFileManager::Get().IsReadOnly(*FilePath))
+	{
+		FPlatformFileManager::Get().GetPlatformFile().SetReadOnly(*FilePath, false);
+	}
+}
 
 FString FEnginePatchManager::GetCurrentEngineVersion()
 {
@@ -121,6 +130,7 @@ bool FEnginePatchManager::ApplyOperation(const FString& FilePath, const FString&
 		Lines.Insert(Block[i], LineIndex + i);
 	}
 
+	MakeWritable(FilePath);
 	if (!FFileHelper::SaveStringArrayToFile(Lines, *FilePath))
 	{
 		OutError = FString::Printf(TEXT("Cannot write file: %s"), *FilePath);
@@ -223,6 +233,7 @@ bool FEnginePatchManager::ApplyPatch(const FEnginePatch& Patch, FString& OutErro
 		}
 
 		// Save file once at the end
+		MakeWritable(FullPath);
 		if (!FFileHelper::SaveStringArrayToFile(Lines, *FullPath))
 		{
 			OutError = FString::Printf(TEXT("Cannot write file: %s"), *FullPath);
@@ -302,6 +313,7 @@ bool FEnginePatchManager::UnpatchOperation(const FString& FilePath, const FStrin
 		Lines.Insert(Restored[i], BeginIndex + i);
 	}
 
+	MakeWritable(FilePath);
 	if (!FFileHelper::SaveStringArrayToFile(Lines, *FilePath))
 	{
 		OutError = FString::Printf(TEXT("Cannot write file: %s"), *FilePath);
