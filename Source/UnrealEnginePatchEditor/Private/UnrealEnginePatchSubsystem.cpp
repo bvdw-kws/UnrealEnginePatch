@@ -8,6 +8,7 @@
 #include "EnginePatchFileLoader.h"
 #include "EnginePatchManager.h"
 #include "Misc/Paths.h"
+#include "HAL/FileManager.h"
 #include "Interfaces/IProjectManager.h"
 #include "Interfaces/IPluginManager.h"
 #include "ProjectDescriptor.h"
@@ -33,10 +34,19 @@ void UUnrealEnginePatchSubsystem::Initialize(FSubsystemCollectionBase& Collectio
 {
 	Super::Initialize(Collection);
 
-	// Default discovery: Recall plugin's EnginePatch directory
-	FString RecallPatchDir = FPaths::ConvertRelativePathToFull(
-		FPaths::ProjectPluginsDir() / TEXT("Recall/EnginePatch"));
-	PatchDirectories.Add(RecallPatchDir);
+	// Discover EnginePatch directories from all plugins
+	IFileManager& FileManager = IFileManager::Get();
+	TArray<FString> PluginDirs;
+	FileManager.FindFiles(PluginDirs, *(FPaths::ProjectPluginsDir() / TEXT("*")), false, true);
+	for (const FString& PluginDir : PluginDirs)
+	{
+		FString PatchDir = FPaths::ConvertRelativePathToFull(
+			FPaths::ProjectPluginsDir() / PluginDir / TEXT("EnginePatch"));
+		if (FPaths::DirectoryExists(PatchDir))
+		{
+			PatchDirectories.Add(PatchDir);
+		}
+	}
 
 	for (const FString& Dir : PatchDirectories)
 	{
