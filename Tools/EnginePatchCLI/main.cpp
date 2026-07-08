@@ -137,6 +137,26 @@ int main(int argc, char* argv[]) {
 #endif
     }
 
+    // For custom engine builds, EngineAssociation is deliberately left empty.
+    // Fall back to the engine's own Build.version to identify its Major.Minor version.
+    if (engineVersion.empty()) {
+        fs::path buildVersionPath = fs::path(engineDir) / "Build" / "Build.version";
+        std::ifstream buildVersionFile(buildVersionPath);
+        if (buildVersionFile.is_open()) {
+            try {
+                json buildVersionJson = json::parse(buildVersionFile);
+                engineVersion = std::to_string(buildVersionJson["MajorVersion"].get<int>()) + "." +
+                                 std::to_string(buildVersionJson["MinorVersion"].get<int>());
+            } catch (const std::exception& e) {
+                std::cerr << "[EnginePatch] Failed to parse " << buildVersionPath << ": " << e.what() << std::endl;
+            }
+        }
+        if (engineVersion.empty()) {
+            std::cerr << "[EnginePatch] Could not determine engine version from Build.version" << std::endl;
+            return 1;
+        }
+    }
+
     // 4. Scan for patch JSON files and load them
     std::vector<EnginePatch> allPatches;
     try {
